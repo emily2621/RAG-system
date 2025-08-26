@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8" />
+    <title>RAG System</title>
+    <style>
+        body { font-family: sans-serif; margin: 2rem; }
+        section { margin-bottom: 2rem; }
+        input[type=text] { width: 100%; }
+        pre { background: #f4f4f4; padding: 1rem; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>RAG System</h1>
+
+    <section>
+        <h2>1. Upload PDF</h2>
+        <input type="file" id="pdfFile" accept=".pdf" />
+        <button onclick="uploadPdf()">Upload</button>
+        <div id="uploadResult" style="margin-top: 1rem;"></div>
+        <h3>Files Uploaded</h3>
+        <!--<pre id="fileList"></pre>-->
+        <div id="fileList"></div>
+        <h3>Delete Uploaded Files</h3>
+        <!--<div id="fileList"></div>-->
+        <button onclick="deleteSelected()">Delete Selected</button>
+
+    </section>
+
+    <section>
+        <h2>2. Send Query</h2>
+        <label for="question">Question:</label><br/>
+        <input type="text" id="question" placeholder="Ask something about the document..." />
+        <br/><br/>
+        <button onclick="sendQuery()">Query</button>
+    </section>
+
+    <section>
+        <h2>3. Answer</h2>
+        <div id="answer" style="white-space: pre-wrap; line-height: 1.5;"></div>
+        <h3>Source Metadata</h3>
+        <pre id="sources"></pre>
+    </section>
+
+    <script>
+   
+
+    //---------------------------v2---------------------------
+    function rpcCall(payload) {
+        return fetch("http://localhost:8003/mcp/v1/rpc", {
+            method : "POST",
+            headers: { "Content-Type": "application/json" },
+            body   : JSON.stringify(payload)
+        }).then(r => r.json());
+    }
+
+    const fileIds = [];
+
+    
+
+    async function uploadPdf() {
+        const input = document.getElementById("pdfFile");
+        const div = document.getElementById("uploadResult");
+        if (!input.files.length) { alert("Please choose at least one PDF"); return; }
+
+        // 針對每個檔案都上傳
+        for (const file of input.files) {
+            div.innerText = `Uploading ${file.name} ...`;
+            const dataUrl = await new Promise((res, rej) => {
+            const reader = new FileReader();
+            reader.onerror = () => rej(reader.error);
+            reader.onload  = () => res(reader.result);
+            reader.readAsDataURL(file);
+            });
+            const b64 = dataUrl.split(",")[1];
+
+            const payload = {
+            jsonrpc:"2.0", id: Date.now(),
+            method :"uploadPdf",
+            params:{ pdf_data: b64, filename: file.name }
+            };
+            const rpc = await rpcCall(payload);
+            if (rpc.error) {
+            div.innerText = `Upload error: ${rpc.error.message}`;
+            continue;
+            }
+            const info = rpc.result;  // 回傳 { status, source, chunks_added, file_id }
+
+            // 在 fileList 中加入一行 checkbox
+            const list = document.getElementById("fileList");
+            const line = document.createElement("div");
+            line.innerHTML = `
+            <label>
+                <input type="checkbox"
+                    class="file-checkbox"
+                    value="${info.file_id||info.source}"
+                    checked>
+                ${info.source}
+            </label>
+            `;
+            list.appendChild(line);
+
+            //edit start
+            const added = info.chunks_added ?? 0;
+            //div.innerText = `Upload successful: ${info.source}`;
+            div.innerText = `Upload successful: ${info.source}\nChunks added: ${added}`;
+            //edit end
+        }
+    }
+
+
+    /* ---------------- 2. Send Query ---------------- */
+    async function sendQuery() {
+        
+        const q   = document.getElementById("question").value.trim();
+        const ans = document.getElementById("answer");
+        const src = document.getElementById("sources");
+        if (!q) { alert("Please input question"); return; }
+
+        // 只取被打勾的檔案
+        const checked = Array.from(document.querySelectorAll(".file-checkbox:checked"))
+                            .map(cb => cb.value);
+        if (!checked.length) { alert("Please select at least one uploaded file"); return; }
+
+        ans.innerText = "Processing ...";  
+        src.innerText = "";
+
+        const payload = {
+            jsonrpc:"2.0", id: Date.now(),
+            method :"predict",
+            params :{ file_ids: checked, question: q }
+        };
+        try {
+            const j = await rpcCall(payload);
+
+            if (j.error) {
+                throw new Error(`RPC Error (${j.error.code}): ${j.error.message}. Data: ${JSON.stringify(j.error.data)}`);
+            } 
+
+            
+            ans.innerText = j.result.answer;
+            
+            
+            //edit start
+            src.innerText = JSON.stringify(j.result.sources, null, 2);
+            
+            //edit end
+        } catch (e) {
+            ans.innerText = "Error: " + e;
+        }
+    }
+
+    // 0826 add
+    async function deleteSelected() {
+        const checked = Array.from(document.querySelectorAll(".file-checkbox:checked"))
+                            .map(cb => cb.value);
+        if (!checked.length) { alert("Please select at least one file"); return; }
+
+        for (const src of checked) {
+            const rpc = await rpcCall({
+            jsonrpc:"2.0", id: Date.now(),
+            method :"deleteSource",
+            params :{ source: src }
+            });
+            if (rpc.error) {
+            alert(`Delete failed for ${src}: ${rpc.error.message}`);
+            continue;
+            }
+            // 從畫面移除該列
+            const el = document.querySelector(`.file-checkbox[value="${src}"]`);
+            if (el) el.closest("div").remove();
+        }
+
+        // 顯示結果（可選）
+        document.getElementById("uploadResult").innerText = "Deletion finished.";
+    }
+    //=========
+
+    </script>
+</body>
+</html>
