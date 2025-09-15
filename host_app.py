@@ -1,5 +1,3 @@
-
-# host_app.py
 import os
 import shutil
 import httpx 
@@ -9,9 +7,14 @@ from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 #from fastapi.templating import Jinja2Templates
-from transformers import (
-    Qwen2_5_VLForConditionalGeneration, AutoTokenizer, AutoProcessor
-)
+# 0914 edit---------------------------------------------------------------
+# from transformers import (
+#     Qwen2_5_VLForConditionalGeneration, AutoTokenizer, AutoProcessor
+# )
+##from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AutoProcessor
+#
+from transformers import AutoConfig, AutoModelForVision2Seq, AutoProcessor
+#--------------------------------------------------------------------------
 from qwen_vl_utils import process_vision_info
 from shared_models import ProcessRequest, IngestRequest, SearchRequest
 
@@ -44,11 +47,34 @@ async def load_prompts():
 
 
 MODEL_NAME = "Qwen/Qwen2.5-VL-7B-Instruct"
+# 0914 edit------------------------------------------------------------------
+##processor = AutoProcessor.from_pretrained(MODEL_NAME, trust_remote_code=True)
+##tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
+
+# model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+#     MODEL_NAME, torch_dtype=torch.float16, device_map="auto", trust_remote_code=True
+# )
+##config = AutoConfig.from_pretrained(MODEL_NAME, trust_remote_code=True)
+#
+# # model = AutoModelForCausalLM.from_pretrained(
+# #     MODEL_NAME,
+# #     torch_dtype=torch.float16,
+# #     device_map="auto",
+# #     trust_remote_code=True,
+# # )
+####config = AutoConfig.from_pretrained(MODEL_NAME, trust_remote_code=True)
+
 processor = AutoProcessor.from_pretrained(MODEL_NAME, trust_remote_code=True)
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
-model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-    MODEL_NAME, torch_dtype=torch.float16, device_map="auto", trust_remote_code=True
+
+model = AutoModelForVision2Seq.from_pretrained(
+    MODEL_NAME,
+    ####config=config,
+    dtype=torch.float16,      
+    device_map="auto",
+    trust_remote_code=True,
 )
+
+#---------------------------------------------------------------------------
 model.eval()
 logging.info("AI model loaded successfully.")
 
@@ -139,6 +165,7 @@ async def query_pipeline(request: Request):
         logging.info("Step 4 successful. AI model generation complete.")
 
         logging.info("Step 5: Decoding response...")
+
         seq = inputs['input_ids'].shape[1]
         ans = processor.batch_decode([gen[0][seq:]], skip_special_tokens=True)[0]
         logging.info("Step 5 successful. Response decoded.")

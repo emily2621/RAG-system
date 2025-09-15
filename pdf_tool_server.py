@@ -10,7 +10,7 @@ import pandas as pd
 from PIL import Image
 import pytesseract
 from shared_models import ProcessRequest, ProcessResponse 
-import logging
+import logging, os, sys
 
 # --- Configuration ---
 PDF_DIR = "./pdfs"
@@ -18,13 +18,18 @@ IMG_DIR = os.path.join(PDF_DIR, "images")
 THUMB_DIR = os.path.join(PDF_DIR, "thumbs")
 DEBUG_DIR = os.path.join(PDF_DIR, "debug")
 for d in (PDF_DIR, IMG_DIR, THUMB_DIR, DEBUG_DIR): os.makedirs(d, exist_ok=True)
-
+#----0913 edit
+# logging.basicConfig(
+#     filename=os.path.join(DEBUG_DIR, "pdf_tool.log"), 
+#     level=logging.INFO,
+#     format="%(asctime)s %(levelname)s %(message)s"
+# )
 logging.basicConfig(
-    filename=os.path.join(DEBUG_DIR, "pdf_tool.log"), 
     level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s"
+    handlers=[logging.StreamHandler(sys.stdout)],
+    format="%(asctime)s [%(levelname)s] %(message)s",
 )
-
+#----
 def log_workflow(event: str, **kwargs):
     logging.info(f"{event}: " + ", ".join(f"{k}={v}" for k,v in kwargs.items()))
 

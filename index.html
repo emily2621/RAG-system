@@ -44,10 +44,8 @@
 
     <script>
    
-
-    //---------------------------v2---------------------------
     function rpcCall(payload) {
-        return fetch("http://localhost:8003/mcp/v1/rpc", {
+        return fetch("/mcp/v1/rpc", {
             method : "POST",
             headers: { "Content-Type": "application/json" },
             body   : JSON.stringify(payload)
@@ -56,8 +54,7 @@
 
     const fileIds = [];
 
-    
-
+    /* ---------- 1. 上傳 PDF ---------- */
     async function uploadPdf() {
         const input = document.getElementById("pdfFile");
         const div = document.getElementById("uploadResult");
@@ -137,13 +134,11 @@
                 throw new Error(`RPC Error (${j.error.code}): ${j.error.message}. Data: ${JSON.stringify(j.error.data)}`);
             } 
 
-            
             ans.innerText = j.result.answer;
-            
-            
+                        
             //edit start
             src.innerText = JSON.stringify(j.result.sources, null, 2);
-            
+            //src.innerText = JSON.stringify(j.result.output.references, null, 2);
             //edit end
         } catch (e) {
             ans.innerText = "Error: " + e;

@@ -16,10 +16,11 @@ COLLECTION = "doc_chunks_mcp"
 app = FastAPI()
 
 # --- Milvus & Embeddings Setup ---
+#----0913 edit
+# if utility.has_collection(COLLECTION):
+#     utility.drop_collection(COLLECTION)
 connections.connect(host=MILVUS_HOST, port=MILVUS_PORT)
-if utility.has_collection(COLLECTION):
-    utility.drop_collection(COLLECTION)
-
+#------------------------------------
 embed_model = HuggingFaceEmbeddings(
     model_name="intfloat/multilingual-e5-large",
     model_kwargs={"device": "cuda"},
@@ -164,6 +165,7 @@ async def search_context(req: SearchRequest):
         # 組合文字 context
         context = "\n".join(d.page_content for d in docs)
 
+        # 蒐集同頁縮圖（以 (source, page) 去重）
         img_paths, seen = [], set()
         for d in docs:
             src = d.metadata.get("source")
@@ -189,14 +191,14 @@ async def search_context(req: SearchRequest):
 @app.post("/delete_source")
 async def delete_source(req: DeleteSourceRequest):
     try:
-
+        # collection 可能尚未建立（第一次開機），直接回 OK
         if not utility.has_collection(COLLECTION):
             return {"status": "ok", "deleted": 0}
 
         coll = Collection(COLLECTION)
         coll.load()  # 確保可操作
         expr = f'source == "{req.source_filename}"'
-        mr = coll.delete(expr)  
+        mr = coll.delete(expr)  # 刪掉該 source 的所有列
         return {"status": "ok", "expr": expr}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Milvus delete failed: {e}")
