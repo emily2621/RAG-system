@@ -1,0 +1,136 @@
+services:
+  py312_base:
+    image: rag-py312-deps:0.1
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.py312_base
+    network_mode: host
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.16
+    container_name: milvus-etcd
+    network_mode: host
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - ./volumes/etcd:/etcd
+    command: >
+      etcd -advertise-client-urls=http://127.0.0.1:2379
+           -listen-client-urls http://0.0.0.0:2379
+           --data-dir /etcd
+
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: milvus-minio
+    network_mode: host
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    command: minio server /minio_data --console-address ":9001"
+    volumes:
+      - ./volumes/minio:/minio_data
+
+  milvus:
+    image: milvusdb/milvus:v2.5.3
+    container_name: milvus-standalone
+    network_mode: host
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: 127.0.0.1:2379
+      MINIO_ADDRESS: 127.0.0.1:9000
+    volumes:
+      - ./volumes/milvus:/var/lib/milvus
+
+  pdf_tool:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.pdf_tool
+    container_name: pdf_tool
+    network_mode: host
+    volumes:
+      - ../pdfs:/app/pdfs
+
+  # rag_tool:
+  #   build:
+  #     context: ..
+  #     dockerfile: deploy/Dockerfile.rag_tool
+  #   container_name: rag_tool
+  #   network_mode: host
+  #   depends_on:
+  #     - milvus
+  #   volumes:
+  #     - ../pdfs:/app/pdfs
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all       
+  #             capabilities: [gpu]
+  #   environment:
+  #     - NVIDIA_VISIBLE_DEVICES=all
+  #     - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+  rag_tool:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.rag_tool
+    container_name: rag_tool
+    network_mode: host
+    depends_on:
+      - milvus
+    volumes:
+      - ../pdfs:/app/pdfs
+    gpus: all                       
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+  # host_app:
+  #   build:
+  #     context: ..
+  #     dockerfile: deploy/Dockerfile.host_app
+  #   container_name: host_app
+  #   network_mode: host
+  #   # 如果要用 NVIDIA GPU，解開下列註解並確保已安裝 nvidia-container-runtime
+  #   # deploy:
+  #   #   resources:
+  #   #     reservations:
+  #   #       devices:
+  #   #         - capabilities: ["gpu"]
+  #   volumes:
+  #     - ../pdfs:/app/pdfs
+  #     - hf-cache:/root/.cache/huggingface
+  host_app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.host_app
+    container_name: host_app
+    network_mode: host
+    gpus: all                      
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    volumes:
+      - ../pdfs:/app/pdfs
+      - hf-cache:/root/.cache/huggingface
+      - ~/.cache/torch:/root/.cache/torch
+
+
+  mcp_server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.mcp_server
+    container_name: mcp_server
+    network_mode: host
+    depends_on:
+      - host_app
+      - pdf_tool
+      - rag_tool
+    volumes:
+      - ../pdfs:/app/pdfs
+
+volumes:
+  milvus-data:
+  hf-cache:

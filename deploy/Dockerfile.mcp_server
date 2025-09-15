@@ -1,0 +1,8 @@
+# syntax=docker/dockerfile:1.7
+FROM rag-py312-deps:0.1
+
+WORKDIR /app
+COPY . /app
+
+EXPOSE 8003
+CMD ["python", "-m", "uvicorn", "mcp_server:app", "--host", "0.0.0.0", "--port", "8003"]

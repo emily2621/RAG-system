@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1.7
+FROM python:3.12-slim AS py312-base
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PYTHONUNBUFFERED=1 \
+    TZ=Asia/Taipei
+
+WORKDIR /app
+
+# 系統相依（PDF/影像/HTTP 都共用）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 libglib2.0-0 tesseract-ocr curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 只先複製 requirements，利用 layer cache
+COPY requirements.txt /deps/requirements.txt
+
+# 新增 / 調整為以下兩行（或合併為一個 RUN 也行）
+RUN pip uninstall -y fitz || true
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --upgrade pip && \
+    pip install --no-cache-dir -r /deps/requirements.txt
+
+# # 使用 BuildKit pip 快取（重建時幾乎不會重抓）
+# RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+#     python -m pip install --upgrade pip && \
+#     pip install -r /deps/requirements.txt
+
+# 建議用非 root 使用者
+RUN useradd -m appuser
+USER appuser

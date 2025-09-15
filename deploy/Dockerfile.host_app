@@ -1,0 +1,95 @@
+# FROM pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
+
+# ENV PYTHONUNBUFFERED=1 \
+#     TZ=Asia/Taipei
+
+# WORKDIR /app
+
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#     git wget curl ca-certificates && \
+#     rm -rf /var/lib/apt/lists/*
+
+# # 先安裝 requirements（分層 + BuildKit 快取）
+# COPY requirements.txt /deps/requirements.txt
+
+# RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+#     python -m pip install --upgrade pip && \
+#     pip install -r /deps/requirements.txt
+
+# # 再 COPY 程式碼（改程式碼不會打掉上一層快取）
+# COPY . /app
+
+# EXPOSE 8000
+# CMD ["python", "-m", "uvicorn", "host_app:app", "--host", "0.0.0.0", "--port", "8000"]
+
+#v2
+# FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+
+# ENV PYTHONUNBUFFERED=1 \
+#     TZ=Asia/Taipei
+
+# WORKDIR /app
+
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#     git wget curl ca-certificates && \
+#     rm -rf /var/lib/apt/lists/*
+
+# # 先安裝「GPU 版」的 torch/vision/torchaudio（指向 cu124 的官方 wheel）
+# RUN python -m pip install --upgrade pip && \
+#     pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu124 \
+#         torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0
+
+# # 其餘依賴：把 requirements.txt 裡 torch/vision/torchaudio/triton 排除，避免覆蓋成 CPU 版
+# COPY requirements.txt /deps/requirements.txt
+# RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+#     grep -vE '^(torch|torchvision|torchaudio|triton)(==|>=)' /deps/requirements.txt > /deps/requirements.no-torch.txt && \
+#     pip install --no-cache-dir -r /deps/requirements.no-torch.txt
+
+# # 再 COPY 程式碼
+# COPY . /app
+
+# EXPOSE 8000
+# CMD ["python","-m","uvicorn","host_app:app","--host","0.0.0.0","--port","8000"]
+
+#v3
+FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    TZ=Asia/Taipei \
+    HF_HOME=/root/.cache/huggingface \
+    HF_HUB_ENABLE_HF_TRANSFER=1 \
+    TRANSFORMERS_NO_TORCHVISION_IMPORT=1 \
+    PIP_DEFAULT_TIMEOUT=300
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git wget curl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# CUDA 對應的 torch/vision/torchaudio（cu124）
+RUN python -m pip install --upgrade pip && \
+    pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu124 \
+        torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0
+
+# 其餘依賴（過濾掉 torch/vision/torchaudio/triton，避免被覆蓋）
+COPY requirements.txt /deps/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    grep -vE '^(torch|torchvision|torchaudio|triton)(==|>=)' /deps/requirements.txt > /deps/requirements.no-torch.txt && \
+    pip install --no-cache-dir -r /deps/requirements.no-torch.txt
+
+# Qwen2.5-VL 需要的固定版本（你剛剛驗證可用）
+RUN pip install --no-cache-dir \
+    "transformers==4.56.1" \
+    "tokenizers==0.22.0" \
+    "accelerate==1.7.0" \
+    "qwen-vl-utils>=0.0.8" \
+    "hf_transfer" \
+    "pillow<10" "timm==1.0.13" "einops" "safetensors" "opencv-python-headless"
+
+# 放入程式碼
+COPY . /app
+
+EXPOSE 8000
+CMD ["python","-m","uvicorn","host_app:app","--host","0.0.0.0","--port","8000"]
+
