@@ -1,0 +1,28 @@
+# Python / venv
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Git / IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# 大檔 / 快取 / 模型
+pdfs/
+hf-cache/
+.cache/
+.huggingface/
+*.bin
+*.ckpt
+*.pt
+*.pth
+*.onnx
+
+# 壓縮與雜項
+*.zip
+*.tar
+*.tar.gz
+*.log
